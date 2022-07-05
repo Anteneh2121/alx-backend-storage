@@ -1,45 +1,50 @@
 #!/usr/bin/env python3
-""" MongoDB Operations with Python using pymongo """
+"""Log stats - new version"""
 from pymongo import MongoClient
 
-if __name__ == "__main__":
-    """ Provides some stats about Nginx logs stored in MongoDB """
-    client = MongoClient('mongodb://127.0.0.1:27017')
-    nginx_collection = client.logs.nginx
 
-    n_logs = nginx_collection.count_documents({})
-    print(f'{n_logs} logs')
-
-    methods = ["GET", "POST", "PUT", "PATCH", "DELETE"]
+def logs(nginx):
+    '''
+    Prints Nginx request logs.
+    '''
+    print(f'{nginx.count_documents({})} logs')
     print('Methods:')
-    for method in methods:
-        count = nginx_collection.count_documents({"method": method})
-        print(f'\tmethod {method}: {count}')
+    reqs = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
+    for req in reqs:
+        print(f'\tmethod {req}: {nginx.count_documents({"method": req})}')
+    print(f'{nginx.count_documents({"path": "/status"})} status check')
 
-    status_check = nginx_collection.count_documents(
-        {"method": "GET", "path": "/status"}
+
+def ips(nginx):
+    '''
+    Prints he most present IPs in the collection
+    '''
+    print("IPs:")
+    lists = nginx.aggregate(
+            [
+                {'$match': {}},
+                {'$group': {
+                    '_id': '$ip',
+                    'tot': {'$sum': 1}
+                }},
+                {'$sort': {'tot': -1}},
+                {'$limit': 10}
+            ]
     )
 
-    print(f'{status_check} status check')
+    for li in lists:
+        print(f'\t{li.get("_id")}: {li.get("tot")}')
 
-    top_ips = nginx_collection.aggregate([
-        {"$group":
-            {
-                "_id": "$ip",
-                "count": {"$sum": 1}
-            }
-         },
-        {"$sort": {"count": -1}},
-        {"$limit": 10},
-        {"$project": {
-            "_id": 0,
-            "ip": "$_id",
-            "count": 1
-        }}
-    ])
 
-    print("IPs:")
-    for top_ip in top_ips:
-        ip = top_ip.get("ip")
-        count = top_ip.get("count")
-        print(f'\t{ip}: {count}')
+def conn():
+    '''
+    Establish a connection with MongoDB.
+    '''
+    client = MongoClient('mongodb://127.0.0.1:27017')
+    nginx = client.logs.nginx
+    logs(nginx)
+    ips(nginx)
+
+
+if __name__ == '__main__':
+    conn()
